@@ -10,7 +10,7 @@ export interface DaxResult<T = unknown> {
   data: T | null
   /** 平台 RSA 响应签名（Base64） */
   sign?: string
-  /** 响应时间 UTC ISO */
+  /** 响应时间（北京时间 yyyy-MM-dd HH:mm:ss） */
   resTime?: string
   /** 请求 ID 回显 */
   reqId?: string

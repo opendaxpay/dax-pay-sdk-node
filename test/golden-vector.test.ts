@@ -41,7 +41,7 @@ describe('黄金向量 V2：嵌套对象 + 列表 + 特殊字符', () => {
 describe('黄金向量 V3：响应体验签', () => {
   const json = JSON.stringify(V3.input)
 
-  it('签名串拼接一致（嵌套data./resTime UTC ISO）', () => {
+  it('签名串拼接一致（嵌套data./resTime 北京时间）', () => {
     expect(buildSignStr(json)).toBe(V3.expectedSignStr)
   })
 

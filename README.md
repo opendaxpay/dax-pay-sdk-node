@@ -15,7 +15,7 @@ DaxPay 开放支付平台 Node.js SDK（TypeScript），封装支付下单、关
 ## 安装（源码引入）
 
 ```bash
-npm install github:daxpay/daxpay-open-sdk-nodejs
+npm install github:opendaxpay/dax-pay-sdk-node
 ```
 
 ```ts
@@ -47,13 +47,13 @@ const result = await client.pay({
 // const ok = client.verifyNotice(rawBody)
 ```
 
-> 完整可运行示例见 `examples/`（实现中）。
+> 完整可运行示例见 [`examples/pay.ts`](examples/pay.ts)。
 
-## 契约文档
+## 接口文档
 
-- 接口契约：[`daxpay-open/_doc/design/sdk-contract.md`](../../dax-pay-open/_doc/design/sdk-contract.md)
-- 黄金测试向量：[`sdk-test-vectors.md`](../../dax-pay-open/_doc/design/sdk-test-vectors.md)
+- [接入准备](https://doc.open.daxpay.cn/api/getting-started) · [签名规则](https://doc.open.daxpay.cn/api/signature)
+- 黄金测试向量：见 [`test/golden-vector.test.ts`](test/golden-vector.test.ts)（与后端签名契约同源断言）
 
 ## License
 
-LGPL-3.0，与主仓库 [DaxPay Open](../../dax-pay-open) 同协议。
+LGPL-3.0，与主仓库 [DaxPay Open](https://gitee.com/dromara/dax-pay) 同协议。
