@@ -2,7 +2,7 @@
 
 DaxPay 开放支付平台 Node.js SDK（TypeScript），封装支付下单、关闭、退款、订单查询与回调验签。
 
-> **适配 DaxPay Open ≥ 1.0** · **Node.js 18+** · LGPL-3.0 · 零运行时依赖（内置 `crypto` + `fetch`）
+> **适配 DaxPay Open ≥ 1.0** · **Node.js 18+** · Apache-2.0 · 零运行时依赖（内置 `crypto` + `fetch`）
 
 ## 功能
 
@@ -104,4 +104,4 @@ npm run build && node demo/server.mjs
 
 ## License
 
-LGPL-3.0，与主仓库 [DaxPay Open](https://gitee.com/dromara/dax-pay) 同协议。
+Apache-2.0，可自由用于商业项目与闭源集成，协议全文见 [LICENSE](LICENSE)。主仓库 [DaxPay Open](https://gitee.com/dromara/dax-pay) 核心为 LGPL-3.0-or-later，本 SDK 作为独立仓按 Apache-2.0 单独发布。
