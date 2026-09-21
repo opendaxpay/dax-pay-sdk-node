@@ -8,12 +8,29 @@ export interface DaxResult<T = unknown> {
   msg: string
   /** 业务数据，失败时通常 null */
   data: T | null
-  /** 平台 RSA 响应签名（Base64） */
+  /** 平台 RSA 响应签名（Base64）；平台业务异常响应不带此字段 */
   sign?: string
   /** 响应时间（北京时间 yyyy-MM-dd HH:mm:ss） */
   resTime?: string
   /** 请求 ID 回显 */
   reqId?: string
+  /**
+   * 平台业务异常响应的消息字段（平台侧全局异常处理器返回的 Result 形状用 message 而非 msg，
+   * 且不带 sign）。SDK 在 msg 为空时回退读此字段，仅供兼容层使用。
+   */
+  message?: string
+}
+
+/// 调用观测器（联调/排障场景挂载）
+///
+/// 挂在 [DaxPayClient#setObserver] 上可拿到每次调用
+/// 「签名后的完整请求体」与「平台原始响应体」，便于与后端日志逐字对照。
+/// 不设置则零开销，不影响正常调用链。
+export interface DaxPayObserver {
+  /** 请求已签名待发出（signedJson 为含 sign 字段的完整请求 JSON） */
+  onRequest?: (signedJson: string) => void
+  /** 收到平台原始响应体（在响应验签**之前**回调，验签失败时也可拿到原文） */
+  onResponse?: (rawBody: string) => void
 }
 
 /// 公共请求参数（所有业务请求继承，对照契约第四节）
