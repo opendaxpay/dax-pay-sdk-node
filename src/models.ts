@@ -1,4 +1,4 @@
-/// 开放接口业务模型（15 个接口全集）— 对照 sdk-contract.md 第六节
+/// 开放接口业务模型（15 个业务接口 + 签名自检探针）— 对照 sdk-contract.md 第六节
 ///
 /// 约定：金额一律为「分」（整数）；时间字段为 GMT+8 字面量 `yyyy-MM-dd HH:mm:ss`
 /// （契约接口出参不做时区转换，由调用方按需展示）。公共字段（mchNo/appId/reqId/...）
@@ -637,4 +637,28 @@ export interface GatewayOrderResult {
   attach?: string
   /** 同步跳转地址 */
   returnUrl?: string
+}
+
+// ==================================================================
+// 自检族（契约 6.14）
+// ==================================================================
+
+/// 签名自检探针请求参数
+///
+/// 对照契约 6.14 节：仅公共参数（mchNo/appId/reqId/reqTime/nonceStr/sign），无业务字段，
+/// 公共字段由 [DaxPayClient] 注入。
+export interface PingParam {}
+
+/// 签名自检探针结果
+///
+/// 对照契约 6.14 节：回显平台侧解析结果，供对接方核对商户身份与签名串构造。
+export interface PingResult {
+  /** 商户号 */
+  mchNo?: string
+  /** 应用号 */
+  appId?: string
+  /** 是否回落平台默认应用 */
+  appFromDefault?: boolean
+  /** 服务端待签串（验签失败时与本地构造串逐字段比对定位差异） */
+  serverSignStr?: string
 }

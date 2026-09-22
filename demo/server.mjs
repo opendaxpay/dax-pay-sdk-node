@@ -7,6 +7,8 @@
 // - `GET|POST /demo/config` 连接配置：页面弹窗内直接填写服务地址/商户号/密钥，
 //   配置保存在**浏览器 localStorage**（服务端只存内存、不落盘）
 // - `POST /demo/ping` 连通性自检：服务端代调 `GET /unipay/callback/ping` 探针（浏览器直连平台会跨域）
+// - `POST /demo/signed-ping` 签名链路自检：服务端代调 `POST /unipay/ping` 签名探针（「测试连接」第二段，
+//   判定当前配置的商户号/应用/商户私钥是否正确、能否发起真实调用）
 // - `POST /demo/{action}` 调 SDK 发起真实请求，回显「签名后请求体 + 平台原始响应 + 响应验签结果」；
 //   支持全部 15 个开放接口，action 取值见 [ACTIONS]
 // - `POST /callback/{pay|refund|transfer|alloc}`（及通用 `/callback`）接收平台异步通知，用平台公钥验签后暂存
@@ -19,14 +21,16 @@
 // HTTP 层用 node:http，不给 SDK 引入任何 Web 框架依赖；SDK 从 ../dist/index.js 导入已编译产物
 // （Node 原生执行 .ts 要求相对导入写全扩展名 `from './config.ts'`，而 SDK 源码是无扩展名写法，
 // 直接 `node demo/server.ts` 会 ERR_MODULE_NOT_FOUND，故 demo 服务端用纯 JS 消费 dist）。
-import { createPrivateKey, createPublicKey } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 
 // SDK 编译产物缺失时给出可操作提示（静态 import 无法捕获，改用动态 import）
+// 密钥校验复用 SDK 的 validate*（与其它语言同一套容错归一，见 src/rsa.ts）
 let DaxPayClient
+let validatePrivateKeyPEM
+let validatePublicKeyPEM
 try {
-  ;({ DaxPayClient } = await import('../dist/index.js'))
+  ;({ DaxPayClient, validatePrivateKeyPEM, validatePublicKeyPEM } = await import('../dist/index.js'))
 } catch (e) {
   console.error('未找到 SDK 编译产物 dist/index.js: ' + (e && e.message))
   console.error('请先在仓根执行: npm run build')
@@ -39,7 +43,7 @@ const MAX_CALLBACKS = 200
 /// 调试页文件（相对本文件定位，运行时读盘，改页面无需重启）
 const INDEX_HTML = new URL('./index.html', import.meta.url)
 
-/// action → SDK 调用映射表（15 个开放接口），新增接口只需在此登记一行
+/// action → SDK 调用映射表（15 个业务接口 + 签名自检探针），新增接口只需在此登记一行
 const ACTIONS = {
   // 支付族
   pay: (client, p) => client.pay(p),
@@ -61,6 +65,13 @@ const ACTIONS = {
   // 网关族
   'gateway-pre-pay': (client, p) => client.gatewayPrePay(p),
   'gateway-query': (client, p) => client.gatewayQuery(p),
+  // 自检族：探针非 0 码在此转成异常，与其它接口的失败回显行为一致（完整诊断走 /demo/signed-ping）
+  'signed-ping': async (client, p) => {
+    const r = await client.signedPing(p)
+    if (r.code !== 0) {
+      throw new Error('[' + r.code + '] ' + r.msg)
+    }
+  },
 }
 
 // 监听端口（--port= 可覆盖）
@@ -164,7 +175,7 @@ async function handleConfig(req, res, method) {
       privateKey = null
     } else {
       try {
-        createPrivateKey({ key: value, format: 'pem', type: 'pkcs8' })
+        validatePrivateKeyPEM(value)
       } catch (e) {
         sendJson(res, 400, { error: '商户私钥无效: ' + (e && e.message) })
         return
@@ -179,7 +190,7 @@ async function handleConfig(req, res, method) {
       publicKey = null
     } else {
       try {
-        createPublicKey({ key: value, format: 'pem', type: 'spki' })
+        validatePublicKeyPEM(value)
       } catch (e) {
         sendJson(res, 400, { error: '平台公钥无效: ' + (e && e.message) })
         return
@@ -228,6 +239,75 @@ async function handlePing(res) {
       durationMs: Date.now() - begin,
     })
   }
+}
+
+// ==================================================================
+// /demo/signed-ping 签名链路自检（服务端中转，规避浏览器跨域）
+// ==================================================================
+
+/// 代调签名自检探针 `POST /unipay/ping`，供页面「测试连接」第二段使用：
+/// 判定当前配置的商户号/应用/商户私钥/签名串构造是否正确、能否发起真实调用
+async function handleSignedPing(res) {
+  const cfg = currentConfig
+  const result = { serviceUrl: cfg.serviceUrl }
+  const begin = Date.now()
+  if (isBlank(cfg.privateKey) || isBlank(cfg.publicKey)) {
+    result.success = false
+    result.hint = isBlank(cfg.privateKey)
+      ? '尚未配置商户私钥，请先在「连接配置」中填写'
+      : '尚未配置平台公钥（响应无法验签），请先在「连接配置」中填写'
+    sendJson(res, 200, result)
+    return
+  }
+  // observer 捕获发出报文与原始响应，供页面比对签名串（发出 JSON vs 服务端待签串）
+  const captured = { request: null, response: null }
+  const client = new DaxPayClient(cfg).setObserver({
+    onRequest: (signedJson) => {
+      captured.request = signedJson
+    },
+    onResponse: (raw) => {
+      captured.response = raw
+    },
+  })
+  try {
+    const r = await client.signedPing({})
+    result.success = r.code === 0
+    result.code = r.code
+    result.msg = r.msg
+    result.data = r.data ?? null
+    if (r.code !== 0) {
+      result.hint = classifyProbeError(r.code)
+    }
+  } catch (e) {
+    // 走到异常只会是硬错误：网络不通 / HTTP 非 200 / 响应验签失败（平台公钥问题）
+    const msg = String(e && e.message)
+    result.success = false
+    result.error = msg
+    if (msg.includes('响应验签失败')) {
+      result.hint = '平台响应验签失败：请核对「连接配置」中的平台公钥'
+    } else if (msg.includes('HTTP 404')) {
+      result.hint = '网关未放行「商户开放 API」(/unipay) 接口组，需在部署面板开启'
+    }
+  } finally {
+    result.requestBody = captured.request
+    result.responseBody = captured.response
+    result.durationMs = Date.now() - begin
+  }
+  sendJson(res, 200, result)
+}
+
+/// 探针错误码分类提示（对照契约 6.14 诊断表）
+function classifyProbeError(code) {
+  if (code === 20052) {
+    return '验签失败：商户私钥与平台上配置的公钥不配对，或签名串构造不一致——比对「发出报文」与响应 msg 中的服务端待签串'
+  }
+  if (code === 10408 || code === 10409) {
+    return 'Nonce 防重放拦截：请勿复用请求（每次点击都会生成新 nonce）'
+  }
+  if (code === 10410 || code === 10411) {
+    return '请求时间超窗：本机时钟偏差过大，或 reqTime 未按 GMT+8 yyyy-MM-dd HH:mm:ss 字面量'
+  }
+  return '商户号/应用类错误（code ' + code + '）：核对 mchNo 与 appId 是否存在且启用'
 }
 
 // ==================================================================
@@ -390,6 +470,11 @@ const server = createServer(async (req, res) => {
     // 连通性自检：服务端代调平台探针（浏览器直连平台地址会跨域，故由本服务中转）
     if (method === 'POST' && path === '/demo/ping') {
       await handlePing(res)
+      return
+    }
+    // 签名链路自检：服务端代调签名自检探针 POST /unipay/ping（「测试连接」第二段）
+    if (method === 'POST' && path === '/demo/signed-ping') {
+      await handleSignedPing(res)
       return
     }
     // 交易调试（经 SDK 真实调用链）

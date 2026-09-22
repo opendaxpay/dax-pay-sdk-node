@@ -33,6 +33,17 @@ export interface DaxPayObserver {
   onResponse?: (rawBody: string) => void
 }
 
+/// [DaxPayClient#execute] 的可选行为开关
+export interface ExecuteOptions {
+  /**
+   * 非 0 业务码是否抛 [DaxPayError]（默认 true）。
+   * 签名自检探针等诊断类调用置 false：失败码/失败消息本身就是探针的有效答案，
+   * 非 0 码原样返回 DaxResult 供调用方按 code 分类诊断；
+   * 响应验签失败不受此开关影响，仍会抛出（平台公钥配置问题属硬错误）。
+   */
+  throwOnBizError?: boolean
+}
+
 /// 公共请求参数（所有业务请求继承，对照契约第四节）
 export interface CommonParam {
   mchNo?: string

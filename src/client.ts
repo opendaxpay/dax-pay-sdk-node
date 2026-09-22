@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { type Config } from './config.js'
-import { type DaxResult, type DaxPayObserver, DaxPayError, ErrorCode } from './types.js'
+import { type DaxResult, type DaxPayObserver, type ExecuteOptions, DaxPayError, ErrorCode } from './types.js'
 import type {
   AllocOrderResult,
   AllocParam,
@@ -19,6 +19,8 @@ import type {
   PayResult,
   PaySyncParam,
   PaySyncResult,
+  PingParam,
+  PingResult,
   RefundOrderResult,
   RefundParam,
   RefundQueryParam,
@@ -68,7 +70,11 @@ export class DaxPayClient {
 
   /// 通用执行入口：自动填充公共参数 → JSON 签名 → POST → 验签 → 返回 DaxResult<T>
   /// 走 JSON 签名路径（reqTime 已序列化为 GMT+8 字面量），与后端验签一致
-  async execute<T = unknown>(path: string, param: object): Promise<DaxResult<T>> {
+  ///
+  /// options.throwOnBizError 为 false 时非 0 业务码不抛 [DaxPayError] 而是原样返回 DaxResult
+  /// （签名自检探针的职责是报告检查结果，失败码/失败消息本身就是有效答案）；
+  /// 响应验签失败仍抛异常（那是平台公钥配置问题，属于硬错误而非探针答案）。
+  async execute<T = unknown>(path: string, param: object, options?: ExecuteOptions): Promise<DaxResult<T>> {
     const requestParam: Record<string, unknown> = { ...(param as Record<string, unknown>) }
     // 注入公共字段
     if (!requestParam.mchNo) requestParam.mchNo = this.config.mchNo
@@ -116,7 +122,9 @@ export class DaxPayClient {
     }
     // 消息读取兼容：平台异常响应的消息字段是 message（DaxResult 为 msg），msg 为空时回退读取
     if (!result.msg) result.msg = result.message ?? ''
-    if (result.code !== 0) {
+    // 业务码检查：非 0 抛 DaxPayError；探针路径（throwOnBizError=false）不抛而是原样返回 DaxResult，
+    // 失败码/失败消息本身就是探针的有效答案（非 0 码时 data 必为 null）
+    if (result.code !== 0 && options?.throwOnBizError !== false) {
       throw new DaxPayError(result.code, `[${result.code}] ${result.msg}`)
     }
     return result
@@ -195,6 +203,15 @@ export class DaxPayClient {
   /// 网关订单查询 — POST /unipay/gateway/query
   async gatewayQuery(param: GatewayOrderQueryParam): Promise<DaxResult<GatewayOrderResult>> {
     return this.execute<GatewayOrderResult>('/unipay/gateway/query', param)
+  }
+
+  /// 签名自检探针 — POST /unipay/ping（走完整验签链路，一键判定商户号/应用/私钥/签名串是否可用）
+  ///
+  /// 与免签名 [ping] 互补：本方法由持商户私钥方发起，非 0 业务码不抛异常而是原样返回，
+  /// 供调用方按 code 分类诊断（20052=验签失败且 msg 含服务端待签串；10408-10411=nonce/时钟；
+  /// 其余=商户号/应用类）；响应验签失败仍抛异常（平台公钥配置问题）。
+  async signedPing(param: PingParam): Promise<DaxResult<PingResult>> {
+    return this.execute<PingResult>('/unipay/ping', param, { throwOnBizError: false })
   }
 
   /// 回调链路自检探针 — GET /unipay/callback/ping（免签名免登录，返回固定标识文本）
