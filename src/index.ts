@@ -2,9 +2,16 @@
 export type { Config } from './config.js'
 export { DaxPayClient } from './client.js'
 export { DaxPayError, ErrorCode } from './types.js'
-export type { DaxResult, CommonParam, DaxPayObserver } from './types.js'
+export type { DaxResult, CommonParam, DaxPayObserver, ExecuteOptions } from './types.js'
 export { buildSignStr } from './sign.js'
-export { rsaSign, rsaVerify } from './rsa.js'
+export {
+  loadPrivateKey,
+  loadPublicKey,
+  rsaSign,
+  rsaVerify,
+  validatePrivateKeyPEM,
+  validatePublicKeyPEM,
+} from './rsa.js'
 export type {
   // 共享嵌套类型
   AllocDetail,
@@ -46,4 +53,7 @@ export type {
   GatewayOrderResult,
   GatewayPrePayParam,
   GatewayPrePayResult,
+  // 自检族
+  PingParam,
+  PingResult,
 } from './models.js'
