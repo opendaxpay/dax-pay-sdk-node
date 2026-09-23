@@ -141,15 +141,13 @@ export interface PayParam extends CommonParam {
 
 /// 支付下单响应结果
 export interface PayResult {
-  /** 订单 ID */
-  orderId?: number
   /** 商户订单号 */
   bizOrderNo?: string
   /** 平台业务单号 */
   orderNo?: string
   /** 资金交易号（与 orderNo 独立） */
   tradeNo?: string
-  /** 支付状态：wait/progress/success/close/cancel/fail/timeout */
+  /** 支付状态（资金态）：init/processing/success/fail/close/cancel */
   status?: string
   /** 支付参数体（二维码链接/调起参数/跳转 URL） */
   payBody?: string
@@ -199,6 +197,8 @@ export interface PayOrderResult {
   limitPay?: string
   /** 金额，分 */
   amount?: number
+  /** 币种 ISO 4217（如 cny/usd，缺省 cny） */
+  currency?: string
   /** 实收金额，分 */
   realAmount?: number
   /** 可退款余额，分 */
